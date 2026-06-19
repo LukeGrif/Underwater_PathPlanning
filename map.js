@@ -153,6 +153,44 @@ function clipToPoly(start, end, poly) {
   return segs;
 }
 
+// Decimal degrees → DMS string
+function toDMS(deg, isLat) {
+  const dir = deg >= 0 ? (isLat ? 'N' : 'E') : (isLat ? 'S' : 'W');
+  const abs = Math.abs(deg);
+  const d   = Math.floor(abs);
+  const mf  = (abs - d) * 60;
+  const m   = Math.floor(mf);
+  const s   = ((mf - m) * 60).toFixed(3);
+  return `${d}°${String(m).padStart(2,'0')}'${s.padStart(6,'0')}"${dir}`;
+}
+
+function setStartCoords(lat, lng) {
+  document.getElementById('r_slat').textContent = lat.toFixed(8);
+  document.getElementById('r_slng').textContent = lng.toFixed(8);
+  document.getElementById('r_sdms').innerHTML =
+    toDMS(lat, true) + '<br>' + toDMS(lng, false);
+  document.getElementById('btnCopyStart').disabled = false;
+}
+
+function clearStartCoords() {
+  ['r_slat', 'r_slng', 'r_sdms'].forEach(id => {
+    document.getElementById(id).textContent = '—';
+  });
+  document.getElementById('btnCopyStart').disabled = true;
+}
+
+function copyStartCoords() {
+  const d = window._transectData;
+  if (!d || !d.triggerPoints.length) return;
+  const [lat, lng] = d.triggerPoints[0];
+  navigator.clipboard.writeText(`${lat.toFixed(8)}, ${lng.toFixed(8)}`).then(() => {
+    const btn = document.getElementById('btnCopyStart');
+    const orig = btn.textContent;
+    btn.textContent = 'Copied!';
+    setTimeout(() => { btn.textContent = orig; }, 1500);
+  });
+}
+
 // Shoelace area in m²
 function polyArea(poly) {
   let a = 0;
@@ -267,6 +305,20 @@ function redrawTransects() {
       fillOpacity: 0.8, weight: 0
     }).addTo(triggerLayer);
   }
+
+  // ── Start point marker + coords ──────────────────────────────────
+  if (triggerPoints.length) {
+    const sp = triggerPoints[0];
+    L.circleMarker(sp, {
+      radius: 7, color: '#00ff88', fillColor: '#00ff88',
+      fillOpacity: 1, weight: 2
+    }).bindTooltip('DVL start', { permanent: true, direction: 'right', className: 'start-tooltip' })
+      .addTo(triggerLayer);
+    setStartCoords(sp[0], sp[1]);
+  } else {
+    clearStartCoords();
+  }
+
   triggerLayer.addTo(map);
 
   // ── Update result panel ───────────────────────────────────────────
@@ -316,6 +368,7 @@ function clearAll() {
   ['r_tc', 'r_ph', 'r_st', 'r_ca'].forEach(id => {
     document.getElementById(id).textContent = '—';
   });
+  clearStartCoords();
   enableExports(false);
   document.getElementById('mapInfo').textContent =
     'Click "Draw Survey Area" to place polygon vertices, or use the toolbar rectangle tool.';

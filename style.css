@@ -141,6 +141,35 @@ body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); co
 .leaflet-draw-toolbar a { background: #161b22 !important; border-color: var(--border) !important; }
 .leaflet-draw-section { border-color: var(--border) !important; }
 
+/* ── Results grid extras ──────────────────────────────────── */
+.res-divider {
+  grid-column: 1 / -1;
+  border-top: 1px solid var(--border);
+  margin: 4px 0;
+}
+
+.res-dvl  { color: #00ff88 !important; }
+.res-dms  { font-size: 10px !important; line-height: 1.6; }
+
+.btn-copy-coords {
+  font-size: 11px; font-weight: 600; padding: 3px 10px;
+  background: #0d2b1a; border: 1px solid #00ff88;
+  color: #00ff88; border-radius: 5px; cursor: pointer;
+  transition: background 0.15s;
+  justify-self: end;
+}
+.btn-copy-coords:hover:not(:disabled) { background: #1a4a2a; }
+.btn-copy-coords:disabled { opacity: 0.3; cursor: not-allowed; }
+
+/* Leaflet start-point tooltip */
+.start-tooltip {
+  background: #0d2b1a; border: 1px solid #00ff88;
+  color: #00ff88; font-size: 11px; font-weight: 600;
+  padding: 2px 7px; border-radius: 4px;
+  box-shadow: none;
+}
+.start-tooltip::before { border-right-color: #00ff88 !important; }
+
 /* ── Bearing wheel ────────────────────────────────────────── */
 .bearing-readout { text-align: center; }
 
