@@ -82,11 +82,9 @@ function exportCSV() {
     csv += `TransectEnd,${t.end[0].toFixed(8)},${t.end[1].toFixed(8)},${t.index},0,""\n`;
   });
 
-  // Trigger points — include transect index
-  const nTrig = d.nTriggers;
+  // Trigger points — transect and point numbers come from triggerMeta
   d.triggerPoints.forEach((p, i) => {
-    const transectNo = Math.floor(i / nTrig) + 1;
-    const pointNo    = (i % nTrig) + 1;
+    const { transectNo, pointNo } = d.triggerMeta[i];
     csv += `Trigger,${p[0].toFixed(8)},${p[1].toFixed(8)},${transectNo},${pointNo},"${c.triggerIntervalS.toFixed(2)}s interval"\n`;
   });
 

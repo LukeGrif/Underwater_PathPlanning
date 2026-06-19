@@ -3,12 +3,12 @@
 let map, drawControl, drawnItems;
 let transectLayer = null;
 let triggerLayer  = null;
-let boundsRect    = null;
 
-window._surveyBounds   = null;
-window._transectData   = null;
+window._surveyPolygon = null;
+window._surveyBounds  = null;
+window._transectData  = null;
 
-// ─── Initialise map ────────────────────────────────────────────────────────
+// ─── Initialise map ───────────────────────────────────────────────────────────
 const map_ = L.map('map', { center: [51.5, -0.1], zoom: 16 });
 
 L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
@@ -16,7 +16,6 @@ L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/
   maxZoom: 21
 }).addTo(map_);
 
-// ── Labels overlay ──────────────────────────────────────────────────────────
 L.tileLayer('https://services.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', {
   attribution: '', maxZoom: 21, opacity: 0.7
 }).addTo(map_);
@@ -24,134 +23,243 @@ L.tileLayer('https://services.arcgisonline.com/ArcGIS/rest/services/Reference/Wo
 map = map_;
 drawnItems = new L.FeatureGroup().addTo(map);
 
+const shapeStyle = { color: '#00d4ff', weight: 2, fillOpacity: 0.08 };
+
 drawControl = new L.Control.Draw({
   draw: {
-    rectangle: { shapeOptions: { color: '#00d4ff', weight: 2, fillOpacity: 0.08 } },
-    polygon: false, polyline: false, circle: false, circlemarker: false, marker: false
+    polygon: {
+      shapeOptions: shapeStyle,
+      showArea: true,
+      allowIntersection: false
+    },
+    rectangle: { shapeOptions: shapeStyle },
+    polyline: false, circle: false, circlemarker: false, marker: false
   },
   edit: { featureGroup: drawnItems }
 });
 map.addControl(drawControl);
 
+// ─── Draw events ──────────────────────────────────────────────────────────────
+
+function extractRing(layer) {
+  const ll = layer.getLatLngs();
+  // Polygon returns [[...]], rectangle returns [...]
+  const ring = Array.isArray(ll[0]) ? ll[0] : ll;
+  return ring.map(p => [p.lat, p.lng]);
+}
+
 map.on(L.Draw.Event.CREATED, function(e) {
   drawnItems.clearLayers();
-  if (transectLayer) { map.removeLayer(transectLayer); transectLayer = null; }
-  if (triggerLayer)  { map.removeLayer(triggerLayer);  triggerLayer  = null; }
-
+  clearOverlays();
   drawnItems.addLayer(e.layer);
-  window._surveyBounds = e.layer.getBounds();
+  window._surveyPolygon = extractRing(e.layer);
+  window._surveyBounds  = e.layer.getBounds();
   document.getElementById('mapInfo').style.display = 'none';
-  document.getElementById('btnPlan').disabled = false;
-  document.getElementById('btnKML').disabled  = false;
-  document.getElementById('btnCSV').disabled  = false;
+  enableExports(true);
   redrawTransects();
 });
 
 map.on(L.Draw.Event.EDITED, function() {
-  drawnItems.eachLayer(l => { window._surveyBounds = l.getBounds(); });
+  drawnItems.eachLayer(l => {
+    window._surveyPolygon = extractRing(l);
+    window._surveyBounds  = l.getBounds();
+  });
   redrawTransects();
 });
 
-// ─── Geo helpers ────────────────────────────────────────────────────────────
+// ─── Coordinate helpers ───────────────────────────────────────────────────────
 
-// Haversine distance in metres
-function haversineDist(lat1, lng1, lat2, lng2) {
+// [lat,lng] → [x_east, y_north] metres, relative to origin [lat,lng]
+function toMeters(p, origin) {
   const R = 6371000;
-  const dLat = (lat2 - lat1) * Math.PI / 180;
-  const dLng = (lng2 - lng1) * Math.PI / 180;
-  const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLng/2)**2;
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  const dy = (p[0] - origin[0]) * Math.PI / 180 * R;
+  const dx = (p[1] - origin[1]) * Math.PI / 180 * R * Math.cos(origin[0] * Math.PI / 180);
+  return [dx, dy];
 }
 
-// Move a point (lat,lng) by (dx metres East, dy metres North)
-function offsetPoint(lat, lng, dx, dy) {
+// [x_east, y_north] metres → [lat,lng]
+function fromMeters(m, origin) {
   const R = 6371000;
-  const newLat = lat + (dy / R) * (180 / Math.PI);
-  const newLng = lng + (dx / R) * (180 / Math.PI) / Math.cos(lat * Math.PI / 180);
-  return [newLat, newLng];
+  const lat = origin[0] + m[1] / R * 180 / Math.PI;
+  const lng = origin[1] + m[0] / (R * Math.cos(origin[0] * Math.PI / 180)) * 180 / Math.PI;
+  return [lat, lng];
 }
 
-// ─── Transect generation ────────────────────────────────────────────────────
+// Rotate 2-D point CCW by alpha radians
+function rotateCCW(p, alpha) {
+  const c = Math.cos(alpha), s = Math.sin(alpha);
+  return [p[0] * c - p[1] * s, p[0] * s + p[1] * c];
+}
+
+function lerp2(a, b, t) {
+  return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+}
+
+// ─── Polygon math ─────────────────────────────────────────────────────────────
+
+// Ray-casting PIP in 2-D metre space
+function pip(p, poly) {
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const [xi, yi] = poly[i], [xj, yj] = poly[j];
+    if (((yi > p[1]) !== (yj > p[1])) && p[0] < (xj - xi) * (p[1] - yi) / (yj - yi) + xi)
+      inside = !inside;
+  }
+  return inside;
+}
+
+// t along line p1→p2 where it crosses segment p3→p4; null if no crossing
+function segCross(p1, p2, p3, p4) {
+  const dx = p2[0] - p1[0], dy = p2[1] - p1[1];
+  const ex = p4[0] - p3[0], ey = p4[1] - p3[1];
+  const denom = dx * ey - dy * ex;
+  if (Math.abs(denom) < 1e-10) return null;
+  const t = ((p3[0] - p1[0]) * ey - (p3[1] - p1[1]) * ex) / denom;
+  const u = ((p3[0] - p1[0]) * dy - (p3[1] - p1[1]) * dx) / denom;
+  return (u >= 0 && u <= 1) ? t : null;
+}
+
+// Clip an infinite line (start→end, extended beyond bbox) to a polygon.
+// Returns array of [segStart, segEnd] metre pairs that lie inside the polygon.
+function clipToPoly(start, end, poly) {
+  const ts = [];
+  const n = poly.length;
+  for (let i = 0; i < n; i++) {
+    const t = segCross(start, end, poly[i], poly[(i + 1) % n]);
+    if (t !== null) ts.push(t);
+  }
+  ts.sort((a, b) => a - b);
+
+  // Deduplicate near-coincident intersections
+  const deduped = ts.filter((t, i) => i === 0 || t - ts[i - 1] > 1e-8);
+
+  let inside = pip(start, poly);
+  const segs = [];
+  let prev = 0;
+  for (const t of deduped) {
+    if (inside && t > prev) {
+      const s = lerp2(start, end, prev);
+      const e = lerp2(start, end, t);
+      if (Math.hypot(e[0] - s[0], e[1] - s[1]) > 0.01) segs.push([s, e]);
+    }
+    inside = !inside;
+    prev = t;
+  }
+  if (inside) {
+    const s = lerp2(start, end, prev);
+    if (Math.hypot(end[0] - s[0], end[1] - s[1]) > 0.01) segs.push([s, end]);
+  }
+  return segs;
+}
+
+// Shoelace area in m²
+function polyArea(poly) {
+  let a = 0;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++)
+    a += (poly[j][0] + poly[i][0]) * (poly[j][1] - poly[i][1]);
+  return Math.abs(a / 2);
+}
+
+// Haversine distance in metres (for display only)
+function haversine(lat1, lng1, lat2, lng2) {
+  const R = 6371000, toR = Math.PI / 180;
+  const dLat = (lat2 - lat1) * toR, dLng = (lng2 - lng1) * toR;
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * toR) * Math.cos(lat2 * toR) * Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+// ─── Transect generation ──────────────────────────────────────────────────────
+
 function redrawTransects() {
-  if (!window._surveyBounds) return;
+  if (!window._surveyPolygon) return;
   const c = calcPhotogrammetry();
   if (!c) return;
+  clearOverlays();
 
-  if (transectLayer) { map.removeLayer(transectLayer); transectLayer = null; }
-  if (triggerLayer)  { map.removeLayer(triggerLayer);  triggerLayer  = null; }
+  const poly = window._surveyPolygon;
+  const origin = [Math.min(...poly.map(p => p[0])), Math.min(...poly.map(p => p[1]))];
+  const polyM  = poly.map(p => toMeters(p, origin));
 
-  const bounds = window._surveyBounds;
-  const sw = bounds.getSouthWest();
-  const ne = bounds.getNorthEast();
-
-  // Area dimensions in metres
-  const widthM  = haversineDist(sw.lat, sw.lng, sw.lat, ne.lng);
-  const heightM = haversineDist(sw.lat, sw.lng, ne.lat, sw.lng);
-
-  // Determine transect direction
+  // ── Choose transect bearing ──────────────────────────────────────
+  // alphaDeg: CCW rotation (degrees) so that the along-track direction aligns with Y-axis.
+  // alphaDeg = bearing (CW from North) achieves this for arbitrary headings.
   const dir = document.getElementById('transectDir').value;
-  let runNS; // true = transects run N-S, false = E-W
-  if      (dir === 'ns')   runNS = true;
-  else if (dir === 'ew')   runNS = false;
-  else                     runNS = heightM >= widthM; // auto: long axis
+  let alphaDeg;
+  if (dir === 'ns') {
+    alphaDeg = 0;
+  } else if (dir === 'ew') {
+    alphaDeg = 90;
+  } else if (dir === 'custom') {
+    alphaDeg = parseFloat(document.getElementById('bearing').value) || 0;
+  } else {
+    // Auto: longer axis of bounding box determines along-track direction
+    const xs = polyM.map(p => p[0]), ys = polyM.map(p => p[1]);
+    const wM = Math.max(...xs) - Math.min(...xs);
+    const hM = Math.max(...ys) - Math.min(...ys);
+    alphaDeg = hM >= wM ? 0 : 90;
+  }
+  const alpha = alphaDeg * Math.PI / 180;
 
-  // Transects run along one axis; spacing applied across the other
-  const spanM     = runNS ? widthM  : heightM;  // how far we step across
-  const lengthM   = runNS ? heightM : widthM;   // how long each transect is
+  // Rotate polygon so transects become vertical lines (constant X)
+  const polyR = polyM.map(p => rotateCCW(p, alpha));
+  const rxs = polyR.map(p => p[0]), rys = polyR.map(p => p[1]);
+  const [minX, maxX] = [Math.min(...rxs), Math.max(...rxs)];
+  const [minY, maxY] = [Math.min(...rys), Math.max(...rys)];
 
-  const nTransects = Math.ceil(spanM / c.transectSpacing) + 1;
-  const nTriggers  = Math.floor(lengthM / c.frameSpacing) + 1;
+  const nCols = Math.ceil((maxX - minX) / c.transectSpacing) + 1;
 
   const transectLines = [];
   const triggerPoints = [];
+  const triggerMeta   = [];
   const transectMeta  = [];
+  let totalPhotos = 0, totalLengthM = 0;
 
-  for (let t = 0; t < nTransects; t++) {
-    const offset = t * c.transectSpacing;
-    if (offset > spanM + c.transectSpacing) break;
+  for (let t = 0; t < nCols; t++) {
+    const xR = minX + t * c.transectSpacing;
+    if (xR > maxX + c.transectSpacing * 0.5) break;
 
-    let p1, p2;
-    if (runNS) {
-      p1 = offsetPoint(sw.lat, sw.lng, offset, 0);
-      p2 = offsetPoint(sw.lat, sw.lng, offset, lengthM);
-    } else {
-      p1 = offsetPoint(sw.lat, sw.lng, 0, offset);
-      p2 = offsetPoint(sw.lat, sw.lng, lengthM, offset);
-    }
+    const startR = [xR, minY - 1];
+    const endR   = [xR, maxY + 1];
+    const segs   = clipToPoly(startR, endR, polyR);
+    if (!segs.length) continue;
 
-    // Clip to bounds
-    p1[0] = Math.max(sw.lat, Math.min(ne.lat, p1[0]));
-    p1[1] = Math.max(sw.lng, Math.min(ne.lng, p1[1]));
-    p2[0] = Math.max(sw.lat, Math.min(ne.lat, p2[0]));
-    p2[1] = Math.max(sw.lng, Math.min(ne.lng, p2[1]));
+    segs.forEach(([sR, eR]) => {
+      // Unrotate back to metric space, then to lat/lng
+      const sM = rotateCCW(sR, -alpha), eM = rotateCCW(eR, -alpha);
+      const p1 = fromMeters(sM, origin), p2 = fromMeters(eM, origin);
+      const lineIdx = transectLines.length + 1;
 
-    transectLines.push([p1, p2]);
-    transectMeta.push({ start: p1, end: p2, index: t+1 });
+      transectLines.push([p1, p2]);
+      transectMeta.push({ start: p1, end: p2, index: lineIdx });
 
-    // Trigger points along this transect
-    // Alternate direction (boustrophedon)
-    const forward = t % 2 === 0;
-    for (let f = 0; f < nTriggers; f++) {
-      const frac = forward ? f / Math.max(nTriggers - 1, 1) : 1 - f / Math.max(nTriggers - 1, 1);
-      const lat  = p1[0] + (p2[0] - p1[0]) * frac;
-      const lng  = p1[1] + (p2[1] - p1[1]) * frac;
-      if (lat >= sw.lat && lat <= ne.lat && lng >= sw.lng && lng <= ne.lng) {
-        triggerPoints.push([lat, lng]);
+      const segLenM = Math.hypot(eR[0] - sR[0], eR[1] - sR[1]);
+      totalLengthM += segLenM;
+      const nPts    = Math.floor(segLenM / c.frameSpacing) + 1;
+      const forward = lineIdx % 2 === 1;
+      let ptNo = 0;
+
+      for (let f = 0; f < nPts; f++) {
+        const frac = forward ? f / Math.max(nPts - 1, 1) : 1 - f / Math.max(nPts - 1, 1);
+        const pmR = lerp2(sR, eR, frac);
+        if (pip(pmR, polyR)) {
+          triggerPoints.push(fromMeters(rotateCCW(pmR, -alpha), origin));
+          triggerMeta.push({ transectNo: lineIdx, pointNo: ++ptNo });
+        }
       }
-    }
+      totalPhotos += nPts;
+    });
   }
 
-  // Draw transect lines
+  // ── Render transects ──────────────────────────────────────────────
   transectLayer = L.layerGroup();
-  transectLines.forEach((pts, i) => {
+  transectLines.forEach(pts => {
     L.polyline(pts, { color: '#00d4ff', weight: 1.5, opacity: 0.85 }).addTo(transectLayer);
   });
   transectLayer.addTo(map);
 
-  // Draw trigger points (tiny dots, limit rendered to 2000 for performance)
+  // ── Render trigger points (cap rendered count for performance) ────
   triggerLayer = L.layerGroup();
-  const renderLimit = Math.min(triggerPoints.length, 2000);
-  const step = Math.ceil(triggerPoints.length / renderLimit);
+  const step = Math.ceil(triggerPoints.length / 2000);
   for (let i = 0; i < triggerPoints.length; i += step) {
     L.circleMarker(triggerPoints[i], {
       radius: 2, color: '#ffcc00', fillColor: '#ffcc00',
@@ -160,45 +268,55 @@ function redrawTransects() {
   }
   triggerLayer.addTo(map);
 
-  // Area
-  const areaMsq = widthM * heightM;
-  const surveyLengthM = nTransects * lengthM;
-  const surveyTimeSec = surveyLengthM / c.spd;
+  // ── Update result panel ───────────────────────────────────────────
+  const areaM2 = polyArea(polyM);
+  const surveyTimeSec = totalLengthM / c.spd;
   const hrs = Math.floor(surveyTimeSec / 3600);
   const min = Math.floor((surveyTimeSec % 3600) / 60);
 
-  document.getElementById('r_tc').textContent = nTransects;
-  document.getElementById('r_ph').textContent = (nTransects * nTriggers).toLocaleString();
+  document.getElementById('r_tc').textContent = transectLines.length;
+  document.getElementById('r_ph').textContent = totalPhotos.toLocaleString();
   document.getElementById('r_st').textContent = hrs + 'h ' + min + 'm';
-  document.getElementById('r_ca').textContent = (areaMsq).toFixed(0) + ' m² (' + (areaMsq/10000).toFixed(3) + ' ha)';
+  document.getElementById('r_ca').textContent = areaM2.toFixed(0) + ' m² (' + (areaM2 / 10000).toFixed(3) + ' ha)';
 
-  // Store for export
   window._transectData = {
-    transectLines, triggerPoints, nTransects, nTriggers,
-    widthM, heightM, calc: c, transectMeta
+    transectLines, triggerPoints, triggerMeta, transectMeta,
+    nTransects: transectLines.length,
+    calc: c
   };
 }
 
-// ─── UI helpers ─────────────────────────────────────────────────────────────
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function clearOverlays() {
+  if (transectLayer) { map.removeLayer(transectLayer); transectLayer = null; }
+  if (triggerLayer)  { map.removeLayer(triggerLayer);  triggerLayer  = null; }
+}
+
+function enableExports(on) {
+  ['btnPlan', 'btnKML', 'btnCSV'].forEach(id => {
+    document.getElementById(id).disabled = !on;
+  });
+}
+
 function startDrawing() {
-  new L.Draw.Rectangle(map, drawControl.options.draw.rectangle).enable();
-  document.getElementById('mapInfo').textContent = 'Drag to draw your survey rectangle…';
+  new L.Draw.Polygon(map, drawControl.options.draw.polygon).enable();
+  document.getElementById('mapInfo').textContent =
+    'Click to place vertices — double-click to close the polygon.';
   document.getElementById('mapInfo').style.display = 'block';
 }
 
 function clearAll() {
   drawnItems.clearLayers();
-  if (transectLayer) { map.removeLayer(transectLayer); transectLayer = null; }
-  if (triggerLayer)  { map.removeLayer(triggerLayer);  triggerLayer  = null; }
-  window._surveyBounds = null;
-  window._transectData = null;
-  document.getElementById('r_tc').textContent = '—';
-  document.getElementById('r_ph').textContent = '—';
-  document.getElementById('r_st').textContent = '—';
-  document.getElementById('r_ca').textContent = '—';
-  document.getElementById('btnPlan').disabled = true;
-  document.getElementById('btnKML').disabled  = true;
-  document.getElementById('btnCSV').disabled  = true;
-  document.getElementById('mapInfo').textContent = 'Click "Draw Survey Area" then drag a rectangle on the map';
+  clearOverlays();
+  window._surveyPolygon = null;
+  window._surveyBounds  = null;
+  window._transectData  = null;
+  ['r_tc', 'r_ph', 'r_st', 'r_ca'].forEach(id => {
+    document.getElementById(id).textContent = '—';
+  });
+  enableExports(false);
+  document.getElementById('mapInfo').textContent =
+    'Click "Draw Survey Area" to place polygon vertices, or use the toolbar rectangle tool.';
   document.getElementById('mapInfo').style.display = 'block';
 }
