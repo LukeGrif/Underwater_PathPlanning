@@ -1,4 +1,4 @@
-// KML and CSV export
+// KML, CSV and QGroundControl .plan export
 
 function downloadBlob(content, filename, mime) {
   const blob = new Blob([content], { type: mime });
@@ -101,4 +101,55 @@ function exportCSV() {
   csv += `# Est. photos,${(d.nTransects * d.nTriggers).toLocaleString()}\n`;
 
   downloadBlob(csv, 'photogrammetry_waypoints.csv', 'text/csv');
+}
+
+function exportPlan() {
+  const d = window._transectData;
+  if (!d) return;
+  const c = d.calc;
+
+  const alt       = c.alt;
+  const spdMs     = parseFloat(c.spd.toFixed(4));
+  const firmware  = parseInt(document.getElementById('qgcFirmware').value);
+  const vehicle   = parseInt(document.getElementById('qgcVehicle').value);
+  const hoverSpd  = parseFloat(document.getElementById('qgcHoverSpeed').value) || 5;
+
+  // Build one MAV_CMD_NAV_WAYPOINT (command 16) item per trigger point
+  const items = d.triggerPoints.map((p, i) => ({
+    AMSLAltAboveTerrain: alt,
+    Altitude: alt,
+    AltitudeMode: 1,
+    autoContinue: true,
+    command: 16,
+    doJumpId: i + 1,
+    frame: 3,
+    params: [0, 0, 0, null, p[0], p[1], alt],
+    type: "SimpleItem"
+  }));
+
+  // Home position: surface (alt 5) above first waypoint
+  const firstPt = d.triggerPoints[0];
+  const home = firstPt
+    ? [parseFloat(firstPt[0].toFixed(14)), parseFloat(firstPt[1].toFixed(14)), 5]
+    : [0, 0, 5];
+
+  const plan = {
+    fileType: "Plan",
+    geoFence: { circles: [], polygons: [], version: 2 },
+    groundStation: "QGroundControl",
+    mission: {
+      cruiseSpeed: spdMs,
+      firmwareType: firmware,
+      globalPlanAltitudeMode: 1,
+      hoverSpeed: hoverSpd,
+      items,
+      plannedHomePosition: home,
+      vehicleType: vehicle,
+      version: 2
+    },
+    rallyPoints: { points: [], version: 2 },
+    version: 1
+  };
+
+  downloadBlob(JSON.stringify(plan, null, 4), 'photogrammetry_survey.plan', 'application/json');
 }

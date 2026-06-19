@@ -41,8 +41,9 @@ map.on(L.Draw.Event.CREATED, function(e) {
   drawnItems.addLayer(e.layer);
   window._surveyBounds = e.layer.getBounds();
   document.getElementById('mapInfo').style.display = 'none';
-  document.getElementById('btnKML').disabled = false;
-  document.getElementById('btnCSV').disabled = false;
+  document.getElementById('btnPlan').disabled = false;
+  document.getElementById('btnKML').disabled  = false;
+  document.getElementById('btnCSV').disabled  = false;
   redrawTransects();
 });
 
@@ -195,6 +196,7 @@ function clearAll() {
   document.getElementById('r_ph').textContent = '—';
   document.getElementById('r_st').textContent = '—';
   document.getElementById('r_ca').textContent = '—';
+  document.getElementById('btnPlan').disabled = true;
   document.getElementById('btnKML').disabled  = true;
   document.getElementById('btnCSV').disabled  = true;
   document.getElementById('mapInfo').textContent = 'Click "Draw Survey Area" then drag a rectangle on the map';

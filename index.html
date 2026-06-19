@@ -87,12 +87,34 @@
     </div>
 
     <div class="section">
+      <h2>QGroundControl Export</h2>
+      <div class="param-grid">
+        <label>Firmware</label>
+        <select id="qgcFirmware">
+          <option value="3">ArduPilot</option>
+          <option value="12">PX4</option>
+        </select>
+        <label>Vehicle type</label>
+        <select id="qgcVehicle">
+          <option value="12">Submarine (12)</option>
+          <option value="2">Quadrotor (2)</option>
+          <option value="1">Fixed-wing (1)</option>
+        </select>
+        <label>Hover speed (m/s)</label>
+        <input type="number" id="qgcHoverSpeed" value="5" step="0.5" min="0.1">
+      </div>
+    </div>
+
+    <div class="section">
       <h2>Map Controls</h2>
       <div class="btn-row">
         <button class="btn-primary" id="btnDraw" onclick="startDrawing()">Draw Survey Area</button>
         <button class="btn-secondary" onclick="clearAll()">Clear</button>
       </div>
       <div class="btn-row" style="margin-top:8px">
+        <button class="btn-plan" onclick="exportPlan()" id="btnPlan" disabled>Export .plan</button>
+      </div>
+      <div class="btn-row" style="margin-top:6px">
         <button class="btn-export" onclick="exportKML()" id="btnKML" disabled>Export KML</button>
         <button class="btn-export" onclick="exportCSV()" id="btnCSV" disabled>Export CSV</button>
       </div>
