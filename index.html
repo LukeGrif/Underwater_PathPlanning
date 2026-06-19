@@ -53,6 +53,8 @@
             <option value="knots">knots</option>
           </select>
         </div>
+        <label>Trigger interval (s)</label>
+        <input type="number" id="triggerInterval" value="" step="0.01" min="0.01" placeholder="auto" oninput="onTriggerIntervalInput()">
         <label>Forward overlap (%)</label>
         <input type="range" id="fwdOverlap" min="50" max="95" value="80" oninput="syncSlider('fwdOverlap','fwdOverlapVal');recalculate()">
         <span></span><span id="fwdOverlapVal" class="slider-val">80%</span>
@@ -60,7 +62,7 @@
         <input type="range" id="sidelap" min="20" max="90" value="60" oninput="syncSlider('sidelap','sidelapVal');recalculate()">
         <span></span><span id="sidelapVal" class="slider-val">60%</span>
         <label>Transect direction</label>
-        <select id="transectDir" onchange="redrawTransects()">
+        <select id="transectDir" onchange="recalculate()">
           <option value="auto">Auto (long axis)</option>
           <option value="ns">North–South</option>
           <option value="ew">East–West</option>
@@ -107,7 +109,6 @@
         <span class="res-label">Footprint</span><span id="r_fp" class="res-val">—</span>
         <span class="res-label">Frame spacing</span><span id="r_fs" class="res-val">—</span>
         <span class="res-label">Trigger rate</span><span id="r_tr" class="res-val">—</span>
-        <span class="res-label">Trigger interval</span><span id="r_ti" class="res-val">—</span>
         <span class="res-label">Transect spacing</span><span id="r_ts" class="res-val">—</span>
         <span class="res-label">Transect count</span><span id="r_tc" class="res-val">—</span>
         <span class="res-label">Est. photos</span><span id="r_ph" class="res-val">—</span>

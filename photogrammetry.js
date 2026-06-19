@@ -29,6 +29,31 @@ function getSpeedMs() {
   return document.getElementById('speedUnit').value === 'knots' ? v * 0.514444 : v;
 }
 
+// Frame spacing depends only on camera geometry + overlap, not speed
+function computeFrameSpacing() {
+  const fl  = parseFloat(document.getElementById('focalLength').value);
+  const sh  = parseFloat(document.getElementById('sensorH').value);
+  const alt = parseFloat(document.getElementById('altitude').value);
+  const fo  = parseFloat(document.getElementById('fwdOverlap').value) / 100;
+  if (!fl || !sh || !alt) return null;
+  const fpH = (sh * alt) / fl;
+  return fpH * (1 - fo);
+}
+
+// Called when the user edits the trigger interval input directly
+function onTriggerIntervalInput() {
+  const raw = document.getElementById('triggerInterval').value;
+  if (raw === '' || raw.endsWith('.')) return; // mid-typing
+  const ti = parseFloat(raw);
+  if (!ti || ti <= 0) return;
+  const fs = computeFrameSpacing();
+  if (!fs) return;
+  const speedMs = fs / ti;
+  const unit = document.getElementById('speedUnit').value;
+  document.getElementById('speed').value = (unit === 'knots' ? speedMs / 0.514444 : speedMs).toFixed(4);
+  recalculate();
+}
+
 function calcPhotogrammetry() {
   const fl  = parseFloat(document.getElementById('focalLength').value);
   const sw  = parseFloat(document.getElementById('sensorW').value);
@@ -60,11 +85,16 @@ function recalculate() {
   const c = calcPhotogrammetry();
   if (!c) return;
 
+  // Sync trigger interval from speed — but don't overwrite while the user is typing into it
+  const tiEl = document.getElementById('triggerInterval');
+  if (document.activeElement !== tiEl) {
+    tiEl.value = c.triggerIntervalS.toFixed(3);
+  }
+
   document.getElementById('r_gsd').textContent = c.gsd.toFixed(2) + ' mm/px';
   document.getElementById('r_fp').textContent  = c.fpW.toFixed(2) + ' m × ' + c.fpH.toFixed(2) + ' m';
   document.getElementById('r_fs').textContent  = c.frameSpacing.toFixed(3) + ' m';
   document.getElementById('r_tr').textContent  = c.triggerRateHz.toFixed(3) + ' Hz (' + (c.triggerRateHz * 60).toFixed(1) + '/min)';
-  document.getElementById('r_ti').textContent  = c.triggerIntervalS.toFixed(2) + ' s';
   document.getElementById('r_ts').textContent  = c.transectSpacing.toFixed(2) + ' m';
 
   if (window._surveyPolygon) redrawTransects();
