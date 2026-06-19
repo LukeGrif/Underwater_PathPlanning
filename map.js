@@ -9,7 +9,8 @@ window._surveyBounds  = null;
 window._transectData  = null;
 
 // ─── Initialise map ───────────────────────────────────────────────────────────
-const map_ = L.map('map', { center: [51.5, -0.1], zoom: 16 });
+// University of Limerick — Plassey campus
+const map_ = L.map('map', { center: [52.6741, -8.5717], zoom: 17 });
 
 L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
   attribution: 'Tiles © Esri — Source: Esri, Maxar, Earthstar Geographics',

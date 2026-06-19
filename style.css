@@ -141,6 +141,18 @@ body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); co
 .leaflet-draw-toolbar a { background: #161b22 !important; border-color: var(--border) !important; }
 .leaflet-draw-section { border-color: var(--border) !important; }
 
+/* ── Bearing wheel ────────────────────────────────────────── */
+.bearing-readout { text-align: center; }
+
+#bearingDisplay {
+  font-size: 22px; font-weight: 700; color: var(--accent);
+  font-variant-numeric: tabular-nums; letter-spacing: -0.5px;
+}
+
+.bearing-unit { font-size: 11px; color: var(--muted); margin-left: 4px; }
+
+#wheelSvg:active { cursor: grabbing; }
+
 /* Scrollbar */
 #sidebar::-webkit-scrollbar { width: 5px; }
 #sidebar::-webkit-scrollbar-track { background: transparent; }

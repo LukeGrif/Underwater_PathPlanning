@@ -21,6 +21,7 @@
           <option value="custom">Custom</option>
           <option value="gopro_hero12">GoPro Hero 12 (wide)</option>
           <option value="sony_rx100">Sony RX100 VII</option>
+          <option value="sony_ilx_lr1">Sony ILX-LR1 + 20mm</option>
           <option value="olympus_tg6">Olympus TG-6</option>
           <option value="bluerobotics_lpe">BlueRobotics LPE Cam</option>
         </select>
@@ -65,8 +66,37 @@
           <option value="ew">East–West</option>
           <option value="custom">Custom bearing</option>
         </select>
-        <label id="bearingLabel" style="display:none">Bearing (°)</label>
-        <input type="number" id="bearing" value="0" min="0" max="359" style="display:none" oninput="redrawTransects()">
+        <!-- Bearing wheel — shown only when Custom is selected -->
+        <div id="bearingWheelWrap" style="display:none; grid-column:1/-1; flex-direction:column; align-items:center; gap:8px; padding:10px 0 4px;">
+          <svg id="wheelSvg" viewBox="-70 -70 140 140" width="150" height="150"
+               style="cursor:grab; user-select:none; -webkit-user-select:none; display:block;">
+            <!-- outer ring -->
+            <circle r="66" fill="#0d1117" stroke="#30363d" stroke-width="1.5"/>
+            <!-- cardinal ticks -->
+            <line x1="0"   y1="-56" x2="0"   y2="-64" stroke="#00d4ff" stroke-width="2"/>
+            <line x1="0"   y1="56"  x2="0"   y2="64"  stroke="#4a5568" stroke-width="1.5"/>
+            <line x1="56"  y1="0"   x2="64"  y2="0"   stroke="#4a5568" stroke-width="1.5"/>
+            <line x1="-56" y1="0"   x2="-64" y2="0"   stroke="#4a5568" stroke-width="1.5"/>
+            <!-- cardinal labels -->
+            <text y="-48" text-anchor="middle" fill="#00d4ff" font-size="11" font-weight="700" font-family="inherit">N</text>
+            <text y="60"  text-anchor="middle" dominant-baseline="hanging" fill="#8b949e" font-size="9" font-family="inherit">S</text>
+            <text x="49" y="3" text-anchor="middle" dominant-baseline="middle" fill="#8b949e" font-size="9" font-family="inherit">E</text>
+            <text x="-49" y="3" text-anchor="middle" dominant-baseline="middle" fill="#8b949e" font-size="9" font-family="inherit">W</text>
+            <!-- rotating pointer (JS updates transform="rotate(X)") -->
+            <g id="wheelPointer" transform="rotate(0)">
+              <line x1="0" y1="12" x2="0" y2="-48" stroke="#00d4ff" stroke-width="2.5" stroke-linecap="round"/>
+              <polygon points="0,-55 -5,-46 5,-46" fill="#00d4ff"/>
+              <line x1="0" y1="12" x2="0" y2="20"  stroke="#30363d" stroke-width="2" stroke-linecap="round"/>
+              <circle r="5" fill="#00d4ff" opacity="0.15"/>
+              <circle r="3" fill="#00d4ff"/>
+            </g>
+          </svg>
+          <div class="bearing-readout">
+            <span id="bearingDisplay">0°</span>
+            <span class="bearing-unit">bearing</span>
+          </div>
+        </div>
+        <input type="hidden" id="bearing" value="0">
       </div>
     </div>
 
