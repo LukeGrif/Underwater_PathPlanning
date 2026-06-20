@@ -292,7 +292,7 @@ function redrawTransects() {
   // ── Render transects ──────────────────────────────────────────────
   transectLayer = L.layerGroup();
   transectLines.forEach(pts => {
-    L.polyline(pts, { color: '#00d4ff', weight: 1.5, opacity: 0.85 }).addTo(transectLayer);
+    L.polyline(pts, { color: '#5580B8', weight: 1.5, opacity: 0.9 }).addTo(transectLayer);
   });
   transectLayer.addTo(map);
 
@@ -301,7 +301,7 @@ function redrawTransects() {
   const step = Math.ceil(triggerPoints.length / 2000);
   for (let i = 0; i < triggerPoints.length; i += step) {
     L.circleMarker(triggerPoints[i], {
-      radius: 2, color: '#ffcc00', fillColor: '#ffcc00',
+      radius: 2, color: '#D4820C', fillColor: '#D4820C',
       fillOpacity: 0.8, weight: 0
     }).addTo(triggerLayer);
   }

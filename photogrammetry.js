@@ -120,7 +120,7 @@ function recalculate() {
     line.setAttribute('y1', (-Math.cos(rad) * r1).toFixed(2));
     line.setAttribute('x2', (Math.sin(rad) * r2).toFixed(2));
     line.setAttribute('y2', (-Math.cos(rad) * r2).toFixed(2));
-    line.setAttribute('stroke', isMajor ? '#4a5568' : '#2d333b');
+    line.setAttribute('stroke', isMajor ? '#3D6499' : '#1E3354');
     line.setAttribute('stroke-width', '1');
     svg.insertBefore(line, pointer);
   }
