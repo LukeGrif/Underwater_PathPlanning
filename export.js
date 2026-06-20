@@ -106,28 +106,29 @@ function exportPlan() {
   if (!d) return;
   const c = d.calc;
 
-  // ArduSub convention: depth is expressed as a negative altitude value
-  // in the absolute (AMSL) frame. e.g. 2 m altitude above bed → -2 in the plan.
+  // ArduSub: depth = negative altitude in MAV_FRAME_GLOBAL_RELATIVE_ALT (frame 3).
+  // e.g. 2 m above seabed → Altitude: -2.  Home is at the surface (alt 0).
   const depthM    = -Math.abs(c.alt);
   const spdMs     = parseFloat(c.spd.toFixed(4));
   const firmware  = parseInt(document.getElementById('qgcFirmware').value);
   const vehicle   = parseInt(document.getElementById('qgcVehicle').value);
   const hoverSpd  = parseFloat(document.getElementById('qgcHoverSpeed').value) || 5;
 
-  // MAV_CMD_NAV_WAYPOINT (16), MAV_FRAME_GLOBAL (0 = absolute WGS84)
+  // MAV_CMD_NAV_WAYPOINT (16), frame 3 = MAV_FRAME_GLOBAL_RELATIVE_ALT.
+  // params[3] must be 0 (not null) — QGC renders null yaw as NaN heading.
   const items = d.triggerPoints.map((p, i) => ({
-    AMSLAltAboveTerrain: null,   // null — terrain service not used underwater
-    Altitude: depthM,            // negative depth below surface
-    AltitudeMode: 0,             // 0 = Absolute
+    AMSLAltAboveTerrain: null,
+    Altitude: depthM,
+    AltitudeMode: 1,             // 1 = Above Home (relative) — matches frame 3
     autoContinue: true,
     command: 16,
     doJumpId: i + 1,
-    frame: 0,                    // MAV_FRAME_GLOBAL (absolute)
-    params: [0, 0, 0, null, p[0], p[1], depthM],
+    frame: 3,                    // MAV_FRAME_GLOBAL_RELATIVE_ALT
+    params: [0, 0, 0, 0, p[0], p[1], depthM],
     type: "SimpleItem"
   }));
 
-  // Home position: at the sea surface (altitude 0) above first waypoint
+  // Home position: sea surface (altitude 0) above first waypoint
   const firstPt = d.triggerPoints[0];
   const home = firstPt
     ? [parseFloat(firstPt[0].toFixed(14)), parseFloat(firstPt[1].toFixed(14)), 0]
@@ -140,7 +141,7 @@ function exportPlan() {
     mission: {
       cruiseSpeed: spdMs,
       firmwareType: firmware,
-      globalPlanAltitudeMode: 0,  // 0 = Absolute
+      globalPlanAltitudeMode: 1,  // 1 = Above Home (relative to surface)
       hoverSpeed: hoverSpd,
       items,
       plannedHomePosition: home,
