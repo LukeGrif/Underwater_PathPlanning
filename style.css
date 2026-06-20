@@ -148,6 +148,7 @@ body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); co
 .btn-secondary:hover, .btn-export:hover:not(:disabled), .btn-plan:hover:not(:disabled) { background: #2d333b; }
 
 .hint { font-size: 11px; color: var(--muted); margin-top: 8px; line-height: 1.5; }
+.ardusub-note { color: #7dd3fc; border-left: 2px solid #7dd3fc; padding-left: 6px; margin-top: 10px; }
 
 /* ── Map ─────────────────────────────────────────────────── */
 #mapContainer { flex: 1; position: relative; }

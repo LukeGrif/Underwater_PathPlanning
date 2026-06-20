@@ -106,30 +106,32 @@ function exportPlan() {
   if (!d) return;
   const c = d.calc;
 
-  const alt       = c.alt;
+  // ArduSub convention: depth is expressed as a negative altitude value
+  // in the absolute (AMSL) frame. e.g. 2 m altitude above bed → -2 in the plan.
+  const depthM    = -Math.abs(c.alt);
   const spdMs     = parseFloat(c.spd.toFixed(4));
   const firmware  = parseInt(document.getElementById('qgcFirmware').value);
   const vehicle   = parseInt(document.getElementById('qgcVehicle').value);
   const hoverSpd  = parseFloat(document.getElementById('qgcHoverSpeed').value) || 5;
 
-  // Build one MAV_CMD_NAV_WAYPOINT (command 16) item per trigger point
+  // MAV_CMD_NAV_WAYPOINT (16), MAV_FRAME_GLOBAL (0 = absolute WGS84)
   const items = d.triggerPoints.map((p, i) => ({
-    AMSLAltAboveTerrain: alt,
-    Altitude: alt,
-    AltitudeMode: 1,
+    AMSLAltAboveTerrain: null,   // null — terrain service not used underwater
+    Altitude: depthM,            // negative depth below surface
+    AltitudeMode: 0,             // 0 = Absolute
     autoContinue: true,
     command: 16,
     doJumpId: i + 1,
-    frame: 3,
-    params: [0, 0, 0, null, p[0], p[1], alt],
+    frame: 0,                    // MAV_FRAME_GLOBAL (absolute)
+    params: [0, 0, 0, null, p[0], p[1], depthM],
     type: "SimpleItem"
   }));
 
-  // Home position: surface (alt 5) above first waypoint
+  // Home position: at the sea surface (altitude 0) above first waypoint
   const firstPt = d.triggerPoints[0];
   const home = firstPt
-    ? [parseFloat(firstPt[0].toFixed(14)), parseFloat(firstPt[1].toFixed(14)), 5]
-    : [0, 0, 5];
+    ? [parseFloat(firstPt[0].toFixed(14)), parseFloat(firstPt[1].toFixed(14)), 0]
+    : [0, 0, 0];
 
   const plan = {
     fileType: "Plan",
@@ -138,7 +140,7 @@ function exportPlan() {
     mission: {
       cruiseSpeed: spdMs,
       firmwareType: firmware,
-      globalPlanAltitudeMode: 1,
+      globalPlanAltitudeMode: 0,  // 0 = Absolute
       hoverSpeed: hoverSpd,
       items,
       plannedHomePosition: home,
